@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, FileText, Image as ImageIcon } from 'lucide-react';
+import { Upload, FileText, Image as ImageIcon, AlertCircle } from 'lucide-react';
 import { Button, Card, LoadingSpinner } from './UI';
 import { analyzeReceipt } from '../services/geminiService';
 import { ExtractedReceiptData } from '../types';
@@ -22,9 +22,11 @@ export const UploadStep: React.FC<UploadStepProps> = ({ onDataExtracted }) => {
     try {
       const data = await analyzeReceipt(file);
       onDataExtracted(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Gagal menganalisa struk. Pastikan gambar jelas dan coba lagi.");
+      // Show the actual error message if available, otherwise generic
+      const msg = err?.message || "Gagal menganalisa struk. Pastikan gambar jelas dan coba lagi.";
+      setError(msg);
     } finally {
       setIsAnalyzing(false);
     }
@@ -37,7 +39,7 @@ export const UploadStep: React.FC<UploadStepProps> = ({ onDataExtracted }) => {
         <p className="text-gray-500">Upload screenshot atau foto struk (GoFood, Grab, Shopee).</p>
       </div>
 
-      <Card className="border-2 border-dashed border-gray-300 hover:border-emerald-500 transition-colors cursor-pointer relative">
+      <Card className={`border-2 border-dashed transition-colors cursor-pointer relative ${error ? 'border-red-300 bg-red-50' : 'border-gray-300 hover:border-emerald-500'}`}>
         <input 
           type="file" 
           accept="image/*,application/pdf"
@@ -53,11 +55,13 @@ export const UploadStep: React.FC<UploadStepProps> = ({ onDataExtracted }) => {
             </>
           ) : (
             <>
-              <div className="p-4 bg-emerald-50 rounded-full">
-                <Upload className="w-8 h-8 text-emerald-600" />
+              <div className={`p-4 rounded-full ${error ? 'bg-red-100' : 'bg-emerald-50'}`}>
+                {error ? <AlertCircle className="w-8 h-8 text-red-600" /> : <Upload className="w-8 h-8 text-emerald-600" />}
               </div>
               <div className="text-center">
-                <p className="font-medium text-gray-700">Klik untuk upload</p>
+                <p className={`font-medium ${error ? 'text-red-700' : 'text-gray-700'}`}>
+                    {error ? "Klik untuk coba lagi" : "Klik untuk upload"}
+                </p>
                 <p className="text-sm">PNG, JPG, atau PDF</p>
               </div>
             </>
@@ -66,8 +70,8 @@ export const UploadStep: React.FC<UploadStepProps> = ({ onDataExtracted }) => {
       </Card>
 
       {error && (
-        <div className="p-4 bg-red-50 text-red-600 rounded-lg text-sm text-center">
-          {error}
+        <div className="p-4 bg-red-100 border border-red-200 text-red-700 rounded-lg text-sm text-center">
+          <strong>Error:</strong> {error}
         </div>
       )}
 
