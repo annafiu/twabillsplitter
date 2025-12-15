@@ -26,13 +26,9 @@ export const fileToGenerativePart = async (file: File): Promise<{ inlineData: { 
 };
 
 export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-      throw new Error("API Key belum diset (Missing API_KEY env var). Cek konfigurasi Vercel.");
-  }
-
-  // Initialize AI here
-  const ai = new GoogleGenAI({ apiKey });
+  // Initialize AI with process.env.API_KEY directly as per guidelines.
+  // The environment variable is handled by Vite define plugin.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const imagePart = await fileToGenerativePart(file);
 
   try {
