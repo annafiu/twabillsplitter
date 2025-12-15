@@ -1,8 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ExtractedReceiptData } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 // Helper to convert File to Base64
 export const fileToGenerativePart = async (file: File): Promise<{ inlineData: { data: string; mimeType: string } }> => {
   return new Promise((resolve, reject) => {
@@ -24,6 +22,8 @@ export const fileToGenerativePart = async (file: File): Promise<{ inlineData: { 
 };
 
 export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> => {
+  // Initialize AI here to ensure it uses the current env var and doesn't crash app load if key is missing
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const imagePart = await fileToGenerativePart(file);
 
   const response = await ai.models.generateContent({
