@@ -1,0 +1,5 @@
+{
+  "name": "TWA BillSplitter",
+  "description": "Automatically split food delivery bills from screenshots using AI. Calculates proportional discounts and shared delivery fees.",
+  "requestFramePermissions": []
+}
