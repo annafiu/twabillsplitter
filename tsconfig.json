@@ -12,8 +12,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "allowSyntheticDefaultImports": true,
-    "types": ["node"]
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["**/*"]
+  "include": ["**/*"],
+  "exclude": ["node_modules", "vite.config.ts"]
 }
