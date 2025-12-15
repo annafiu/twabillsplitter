@@ -27,7 +27,8 @@ export const ResultStep: React.FC<ResultStepProps> = ({ data, people, assignment
 
     // 3. Calculate fixed fees per person
     const totalFixedFees = data.deliveryFee + data.serviceFee;
-    const feePerPerson = activePeopleCount > 0 ? totalFixedFees / activePeopleCount : 0;
+    // Use Math.ceil to round UP fees to nearest Rupiah so host doesn't lose money on decimals
+    const feePerPerson = activePeopleCount > 0 ? Math.ceil(totalFixedFees / activePeopleCount) : 0;
 
     // 4. Group by Person
     const personResults = people
@@ -187,21 +188,21 @@ export const ResultStep: React.FC<ResultStepProps> = ({ data, people, assignment
                       <div key={i.id} className="text-xs mb-1">{i.name}</div>
                     ))}
                   </td>
-                  <td className="px-6 py-4 text-right align-top">
+                  <td className="px-6 py-4 text-right align-top whitespace-nowrap">
                     {formatRupiah(res.subtotal)}
                   </td>
-                  <td className="px-6 py-4 text-right text-red-500 align-top">
-                    -{formatRupiah(res.discount)}
+                  <td className="px-6 py-4 text-right text-red-500 align-top whitespace-nowrap">
+                    {res.discount > 0 ? `-${formatRupiah(res.discount)}` : '-'}
                   </td>
                   {data.tax > 0 && (
-                     <td className="px-6 py-4 text-right text-orange-600 align-top">
+                     <td className="px-6 py-4 text-right text-orange-600 align-top whitespace-nowrap">
                      +{formatRupiah(res.tax)}
                    </td>
                   )}
-                  <td className="px-6 py-4 text-right text-blue-600 align-top">
+                  <td className="px-6 py-4 text-right text-blue-600 align-top whitespace-nowrap">
                     {formatRupiah(res.fee)}
                   </td>
-                  <td className="px-6 py-4 text-right font-bold text-gray-900 bg-emerald-50 align-top">
+                  <td className="px-6 py-4 text-right font-bold text-gray-900 bg-emerald-50 align-top whitespace-nowrap">
                     {formatRupiah(res.total)}
                   </td>
                 </tr>
@@ -210,21 +211,21 @@ export const ResultStep: React.FC<ResultStepProps> = ({ data, people, assignment
             <tfoot className="bg-gray-100 font-semibold text-gray-900">
               <tr>
                 <td colSpan={2} className="px-6 py-3 text-right">TOTAL</td>
-                <td className="px-6 py-3 text-right">
+                <td className="px-6 py-3 text-right whitespace-nowrap">
                   {formatRupiah(data.subtotal)}
                 </td>
-                <td className="px-6 py-3 text-right text-red-500">
+                <td className="px-6 py-3 text-right text-red-500 whitespace-nowrap">
                   -{formatRupiah(data.totalDiscount)}
                 </td>
                 {data.tax > 0 && (
-                    <td className="px-6 py-3 text-right text-orange-600">
+                    <td className="px-6 py-3 text-right text-orange-600 whitespace-nowrap">
                     +{formatRupiah(data.tax)}
                   </td>
                 )}
-                <td className="px-6 py-3 text-right text-blue-600">
+                <td className="px-6 py-3 text-right text-blue-600 whitespace-nowrap">
                   {formatRupiah(data.deliveryFee + data.serviceFee)}
                 </td>
-                <td className="px-6 py-3 text-right bg-emerald-100">
+                <td className="px-6 py-3 text-right bg-emerald-100 whitespace-nowrap">
                   {formatRupiah(result.totalCalculated)}
                 </td>
               </tr>
@@ -260,7 +261,7 @@ export const ResultStep: React.FC<ResultStepProps> = ({ data, people, assignment
            <ul className="text-sm text-emerald-700 space-y-1 list-disc pl-4">
              <li>Harga Menu: Sesuai harga asli di struk.</li>
              <li>Diskon: Proporsional <code>(HargaMenu / Subtotal) × TotalDiskon</code>.</li>
-             <li>Delivery & Fee: Dibagi rata <code>TotalFee / JumlahOrang</code>.</li>
+             <li>Delivery & Fee: Dibagi rata <code>TotalFee / JumlahOrang</code> (dibulatkan ke atas).</li>
              {data.tax > 0 && <li>Pajak: Proporsional <code>(HargaMenu / Subtotal) × TotalPajak</code>.</li>}
            </ul>
         </Card>

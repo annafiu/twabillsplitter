@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ExtractedReceiptData, ReceiptItem } from '../types';
-import { Button, Card, Input } from './UI';
+import { Button, Card, Input, formatRupiah } from './UI';
 import { Plus, Trash2 } from 'lucide-react';
 
 interface VerifyStepProps {
@@ -110,6 +110,7 @@ export const VerifyStep: React.FC<VerifyStepProps> = ({ initialData, onConfirm, 
                     value={item.price} 
                     onChange={(e) => handleUpdateItem(idx, 'price', Number(e.target.value))}
                     placeholder="0"
+                    helperText={item.price > 0 ? formatRupiah(item.price) : ''}
                   />
                 </div>
                 <button 
@@ -136,6 +137,7 @@ export const VerifyStep: React.FC<VerifyStepProps> = ({ initialData, onConfirm, 
               leftAddon="Rp"
               value={data.totalDiscount} 
               onChange={(e) => setData({...data, totalDiscount: Number(e.target.value)})}
+              helperText={data.totalDiscount > 0 ? formatRupiah(data.totalDiscount) : ''}
             />
             <Input 
               label="Fee Ongkir & App" 
@@ -151,6 +153,7 @@ export const VerifyStep: React.FC<VerifyStepProps> = ({ initialData, onConfirm, 
                   tax: 0
                 });
               }}
+              helperText={(data.deliveryFee + data.serviceFee + data.tax) > 0 ? formatRupiah(data.deliveryFee + data.serviceFee + data.tax) : ''}
             />
           </div>
         </div>

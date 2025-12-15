@@ -20,7 +20,7 @@ export const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { 
   );
 };
 
-export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string; leftAddon?: string }> = ({ label, leftAddon, className = '', ...props }) => (
+export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string; leftAddon?: string; helperText?: string }> = ({ label, leftAddon, helperText, className = '', ...props }) => (
   <div className="flex flex-col gap-1 w-full">
     {label && <label className="text-sm font-medium text-gray-700">{label}</label>}
     <div className="relative">
@@ -30,10 +30,11 @@ export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { lab
             </div>
         )}
         <input 
-          className={`border border-gray-300 rounded-lg py-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all w-full ${leftAddon ? 'pl-10 pr-3' : 'px-3'} ${className}`}
+          className={`border border-gray-300 rounded-lg py-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all w-full ${leftAddon ? 'pl-10 pr-3' : 'px-3'} ${className} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
           {...props}
         />
     </div>
+    {helperText && <p className="text-xs text-gray-500 text-right font-mono">{helperText}</p>}
   </div>
 );
 
@@ -49,9 +50,11 @@ export const LoadingSpinner: React.FC = () => (
   </div>
 );
 
-// Format according to official IDR rules: Space after Rp, use dots for thousands, no decimals for cleaner view
+// Format according to official IDR rules: Space after Rp, use dots for thousands, no decimals
 export const formatRupiah = (amount: number) => {
-  return 'Rp ' + Math.abs(amount).toLocaleString('id-ID', { 
+  // Round to avoid decimals in display
+  const rounded = Math.round(amount);
+  return 'Rp ' + Math.abs(rounded).toLocaleString('id-ID', { 
     minimumFractionDigits: 0, 
     maximumFractionDigits: 0 
   });
