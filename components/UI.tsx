@@ -50,12 +50,12 @@ export const LoadingSpinner: React.FC = () => (
   </div>
 );
 
-// Format according to official IDR rules: Space after Rp, use dots for thousands, no decimals
+// Format Rupiah preserving decimals and showing trailing zeros to satisfy user request
 export const formatRupiah = (amount: number) => {
-  // Round to avoid decimals in display
-  const rounded = Math.round(amount);
-  return 'Rp ' + Math.abs(rounded).toLocaleString('id-ID', { 
-    minimumFractionDigits: 0, 
-    maximumFractionDigits: 0 
+  // We use 2 fraction digits as requested ("sampai desimal nol terakhir")
+  // and do NOT use Math.round to satisfy "jangan ada pembulatan".
+  return 'Rp ' + Math.abs(amount).toLocaleString('id-ID', { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
   });
 };

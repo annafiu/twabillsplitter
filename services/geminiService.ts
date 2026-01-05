@@ -7,7 +7,6 @@ export const fileToGenerativePart = async (file: File): Promise<{ inlineData: { 
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64String = reader.result as string;
-      // Remove data url prefix (e.g. "data:image/jpeg;base64,")
       if (!base64String) {
           reject(new Error("Failed to read file"));
           return;
@@ -28,8 +27,6 @@ export const fileToGenerativePart = async (file: File): Promise<{ inlineData: { 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> => {
-  // Initialize AI with process.env.API_KEY directly as per guidelines.
-  // The environment variable is handled by Vite define plugin.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const imagePart = await fileToGenerativePart(file);
 
@@ -44,17 +41,19 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
           parts: [
             imagePart,
             {
-              text: `Analyze this food delivery receipt image. Extract the following details:
-              1. The Merchant/Restaurant Name.
-              2. The Date of the order (format: DD Month YYYY, e.g., 10 December 2025).
-              3. A list of items ordered. If an item has a quantity > 1 (e.g., "2x Nasi Goreng"), list it as a single entry with quantity 2.
-              4. The Subtotal (total price of items before discounts/fees).
-              5. Total Discount (sum of all promo codes, item discounts, delivery discounts). Return as a positive number.
-              6. Delivery Fee.
-              7. Service/Platform/Packaging Fees (sum them up).
-              8. Tax amount.
+              text: `Analyze this food delivery receipt (GoFood, GrabFood, ShopeeFood). Extract details:
+              1. Merchant/Restaurant Name.
+              2. Date (DD Month YYYY).
+              3. Items (name, price, quantity).
+              4. Subtotal, Total Discount (positive), Delivery Fee, Service Fee, Tax.
               
-              Return ONLY raw JSON, do not wrap in markdown code blocks.`,
+              CRITICAL RULES FOR IDR PRICES:
+              - DO NOT ROUND ANY VALUES. Extract the exact value including any decimal parts (cents) if present.
+              - In Indonesian receipts, a dot (.) is usually a thousands separator (e.g., 15.000 is 15 thousand). 
+              - If you see "15.000", return 15000. If you see "7,5" or "7.5" and it clearly represents 7500, return 7500.
+              - However, if there are actual cents (e.g., "15000.75"), return 15000.75.
+              - NEVER truncate zeros. If a price is 5000, return 5000. 
+              - RETURN RAW NUMBERS ONLY in the JSON.`,
             },
           ],
         },
@@ -63,15 +62,15 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              merchantName: { type: Type.STRING, description: "Name of the restaurant or merchant" },
-              date: { type: Type.STRING, description: "Date of order in DD Month YYYY format" },
+              merchantName: { type: Type.STRING },
+              date: { type: Type.STRING },
               items: {
                 type: Type.ARRAY,
                 items: {
                   type: Type.OBJECT,
                   properties: {
                     name: { type: Type.STRING },
-                    price: { type: Type.NUMBER, description: "Total price for this line item (unit price * quantity)" },
+                    price: { type: Type.NUMBER, description: "Exact price as written, no rounding" },
                     quantity: { type: Type.INTEGER },
                   },
                   required: ["name", "price", "quantity"],
@@ -91,7 +90,6 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
       const text = response.text;
       if (!text) throw new Error("No response from AI");
 
-      // Clean markdown if present (just in case)
       let cleanText = text.trim();
       if (cleanText.startsWith('```')) {
           cleanText = cleanText.replace(/^```(json)?\n?/, '').replace(/\n?```$/, '');
@@ -99,9 +97,19 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
 
       const data = JSON.parse(cleanText);
 
-      // Post-processing to add IDs and ensure safety
+      // HEURISTIC: Handle common AI confusion between thousands separator and decimal point in IDR
+      // If the value is suspiciously low (< 1000) but represents a food price, it likely needs * 1000.
+      let multiplier = 1;
+      const checkSubtotal = data.subtotal || 0;
+      if (checkSubtotal > 0 && checkSubtotal < 1000) {
+         multiplier = 1000;
+      }
+
+      const fixPrice = (val: number | undefined) => (val || 0) * multiplier;
+
       const items = (data.items || []).map((item: any, index: number) => ({
         ...item,
+        price: fixPrice(item.price),
         id: `item-${index}-${Date.now()}`,
       }));
 
@@ -109,50 +117,33 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
         merchantName: data.merchantName || "Unknown Merchant",
         date: data.date || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
         items,
-        subtotal: data.subtotal || 0,
-        totalDiscount: data.totalDiscount || 0,
-        deliveryFee: data.deliveryFee || 0,
-        serviceFee: data.serviceFee || 0,
-        tax: data.tax || 0,
+        subtotal: fixPrice(data.subtotal),
+        totalDiscount: fixPrice(data.totalDiscount),
+        deliveryFee: fixPrice(data.deliveryFee),
+        serviceFee: fixPrice(data.serviceFee),
+        tax: fixPrice(data.tax),
       };
 
     } catch (error: any) {
         lastError = error;
-        // Check for 503 or 429 (Too Many Requests) or general "overloaded" message in error string
-        // The error might be a stringified JSON as seen in user report, so we check valid string presence
         const errorMessage = typeof error === 'string' ? error : (error.message || JSON.stringify(error));
         const isTransient = errorMessage.includes('503') || errorMessage.includes('overloaded') || errorMessage.includes('UNAVAILABLE') || (error.status === 503);
-        
         if (isTransient && attempt < MAX_RETRIES - 1) {
-            // Wait with exponential backoff: 2s, 4s, 8s
-            const waitTime = 2000 * Math.pow(2, attempt);
-            console.warn(`Gemini API overloaded. Retrying in ${waitTime}ms... (Attempt ${attempt + 1}/${MAX_RETRIES})`);
-            await delay(waitTime);
+            await delay(2000 * Math.pow(2, attempt));
             continue;
         }
-        
-        // Break loop and throw if not transient or max retries reached
         break;
     }
   }
 
-  // If we get here, it means we failed after retries
-  console.error("Gemini API Error after retries:", lastError);
-  
-  // Try to extract a clean message
   let friendlyMessage = "Gagal menghubungi AI. Model sedang sibuk, silakan coba lagi sebentar lagi.";
   if (lastError?.message) {
-      // If it's the JSON string, try to parse it to get the message
       try {
-          // Check if it looks like the specific JSON error object
           if (lastError.message.includes('{"error":')) {
-              // Extract JSON part if mixed with text, or parse directly
               const jsonMatch = lastError.message.match(/\{.*\}/);
               const jsonStr = jsonMatch ? jsonMatch[0] : lastError.message;
               const errObj = JSON.parse(jsonStr);
-              if (errObj.error?.message) {
-                  friendlyMessage = `AI Error: ${errObj.error.message}`;
-              }
+              if (errObj.error?.message) friendlyMessage = `AI Error: ${errObj.error.message}`;
           } else {
              friendlyMessage = lastError.message;
           }
@@ -160,6 +151,5 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
           friendlyMessage = lastError.message;
       }
   }
-
   throw new Error(friendlyMessage);
 };

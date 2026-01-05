@@ -12,7 +12,20 @@ interface VerifyStepProps {
 export const VerifyStep: React.FC<VerifyStepProps> = ({ initialData, onConfirm, onBack }) => {
   const [data, setData] = useState<ExtractedReceiptData>(initialData);
 
-  // Explode items with quantity > 1 into individual items for easier splitting
+  // Helper to format number to "5.000,00" string for display
+  const formatThousands = (val: number) => {
+    if (val === undefined || val === null) return '';
+    // Show decimals in input as well to be accurate
+    return val.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  };
+
+  // Helper to parse "5.000,75" string to numeric value
+  const parseThousands = (val: string) => {
+    // Remove dots (thousands separators), replace comma with dot (decimal separator)
+    const clean = val.replace(/\./g, '').replace(/,/g, '.').replace(/[^0-9.]/g, '');
+    return parseFloat(clean) || 0;
+  };
+
   React.useEffect(() => {
     const explodedItems: ReceiptItem[] = [];
     initialData.items.forEach(item => {
@@ -32,11 +45,9 @@ export const VerifyStep: React.FC<VerifyStepProps> = ({ initialData, onConfirm, 
       }
     });
     
-    // Only update if the lengths are different to avoid infinite loop or unnecessary renders
     if (explodedItems.length !== data.items.length) {
        setData(prev => ({ ...prev, items: explodedItems }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleUpdateItem = (index: number, field: keyof ReceiptItem, value: string | number) => {
@@ -64,7 +75,7 @@ export const VerifyStep: React.FC<VerifyStepProps> = ({ initialData, onConfirm, 
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="text-center">
         <h2 className="text-2xl font-bold text-gray-800">Cek Data Struk</h2>
-        <p className="text-gray-500">Pastikan harga dan menu sudah sesuai sebelum lanjut.</p>
+        <p className="text-gray-500">Pastikan harga dan menu sudah sesuai (tanpa pembulatan).</p>
       </div>
 
       <Card className="space-y-6">
@@ -86,11 +97,10 @@ export const VerifyStep: React.FC<VerifyStepProps> = ({ initialData, onConfirm, 
         <div className="space-y-4">
           <h3 className="font-semibold text-gray-700 border-b pb-2">Rincian Menu</h3>
           
-          {/* Header Row */}
           <div className="flex gap-2 font-medium text-gray-500 text-sm px-1">
             <div className="flex-grow">Nama Item</div>
             <div className="w-32">Harga</div>
-            <div className="w-10"></div> {/* Spacer for delete button */}
+            <div className="w-10"></div>
           </div>
 
           <div className="space-y-3">
@@ -105,18 +115,16 @@ export const VerifyStep: React.FC<VerifyStepProps> = ({ initialData, onConfirm, 
                 </div>
                 <div className="w-32">
                   <Input 
-                    type="number"
+                    type="text"
                     leftAddon="Rp"
-                    value={item.price} 
-                    onChange={(e) => handleUpdateItem(idx, 'price', Number(e.target.value))}
+                    value={formatThousands(item.price)}
+                    onChange={(e) => handleUpdateItem(idx, 'price', parseThousands(e.target.value))}
                     placeholder="0"
-                    helperText={item.price > 0 ? formatRupiah(item.price) : ''}
                   />
                 </div>
                 <button 
                   onClick={() => handleDeleteItem(idx)}
                   className="p-2 mt-0.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  title="Hapus Menu"
                 >
                   <Trash2 size={18} />
                 </button>
@@ -133,19 +141,18 @@ export const VerifyStep: React.FC<VerifyStepProps> = ({ initialData, onConfirm, 
           <div className="grid grid-cols-2 gap-4">
              <Input 
               label="Diskon (Total)" 
-              type="number" 
+              type="text"
               leftAddon="Rp"
-              value={data.totalDiscount} 
-              onChange={(e) => setData({...data, totalDiscount: Number(e.target.value)})}
-              helperText={data.totalDiscount > 0 ? formatRupiah(data.totalDiscount) : ''}
+              value={formatThousands(data.totalDiscount)} 
+              onChange={(e) => setData({...data, totalDiscount: parseThousands(e.target.value)})}
             />
             <Input 
               label="Fee Ongkir & App" 
-              type="number" 
+              type="text"
               leftAddon="Rp"
-              value={data.deliveryFee + data.serviceFee + data.tax} 
+              value={formatThousands(data.deliveryFee + data.serviceFee + data.tax)} 
               onChange={(e) => {
-                const val = Number(e.target.value);
+                const val = parseThousands(e.target.value);
                 setData({
                   ...data,
                   deliveryFee: val,
@@ -153,7 +160,6 @@ export const VerifyStep: React.FC<VerifyStepProps> = ({ initialData, onConfirm, 
                   tax: 0
                 });
               }}
-              helperText={(data.deliveryFee + data.serviceFee + data.tax) > 0 ? formatRupiah(data.deliveryFee + data.serviceFee + data.tax) : ''}
             />
           </div>
         </div>

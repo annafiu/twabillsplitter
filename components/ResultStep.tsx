@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { ExtractedReceiptData, Person, Assignment } from '../types';
 import { Button, Card, formatRupiah, LoadingSpinner } from './UI';
-import { ArrowLeft, Share2, Download, FileImage, FileText } from 'lucide-react';
+import { ArrowLeft, Share2, FileImage, FileText } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -17,33 +17,25 @@ export const ResultStep: React.FC<ResultStepProps> = ({ data, people, assignment
   const [isDownloading, setIsDownloading] = useState(false);
 
   const result = useMemo(() => {
-    // 1. Calculate base subtotal from verified items to be safe
     const calculatedSubtotal = data.items.reduce((acc, item) => acc + item.price, 0);
-    const subtotal = calculatedSubtotal || data.subtotal || 1; // Prevent div by zero
+    const subtotal = calculatedSubtotal || data.subtotal || 1;
 
-    // 2. Identify active participants (who has items)
     const activePersonIds = new Set(assignments.map(a => a.personId));
     const activePeopleCount = activePersonIds.size;
 
-    // 3. Calculate fixed fees per person
     const totalFixedFees = data.deliveryFee + data.serviceFee;
-    // Use Math.ceil to round UP fees to nearest Rupiah so host doesn't lose money on decimals
-    const feePerPerson = activePeopleCount > 0 ? Math.ceil(totalFixedFees / activePeopleCount) : 0;
+    // Strictly no rounding as requested
+    const feePerPerson = activePeopleCount > 0 ? (totalFixedFees / activePeopleCount) : 0;
 
-    // 4. Group by Person
     const personResults = people
       .filter(p => activePersonIds.has(p.id))
       .map(person => {
-        // Find items for this person
         const personItemIds = assignments.filter(a => a.personId === person.id).map(a => a.itemId);
         const personItems = data.items.filter(item => personItemIds.includes(item.id));
 
         const personSubtotal = personItems.reduce((acc, item) => acc + item.price, 0);
         
-        // Proportional Discount: (PersonSubtotal / TotalSubtotal) * TotalDiscount
         const personDiscount = (personSubtotal / subtotal) * data.totalDiscount;
-
-        // Proportional Tax: (PersonSubtotal / TotalSubtotal) * TotalTax
         const personTax = (personSubtotal / subtotal) * data.tax;
 
         const total = personSubtotal - personDiscount + personTax + feePerPerson;
@@ -80,7 +72,6 @@ export const ResultStep: React.FC<ResultStepProps> = ({ data, people, assignment
     if (!tableRef.current) return;
     setIsDownloading(true);
     try {
-      // useCORS: true is essential for the external image to be captured
       const canvas = await html2canvas(tableRef.current, { 
         scale: 2, 
         backgroundColor: '#ffffff',
@@ -92,7 +83,7 @@ export const ResultStep: React.FC<ResultStepProps> = ({ data, people, assignment
       link.click();
     } catch (err) {
       console.error(err);
-      alert('Gagal mendownload gambar. Coba lagi.');
+      alert('Gagal mendownload gambar.');
     } finally {
       setIsDownloading(false);
     }
@@ -143,25 +134,22 @@ export const ResultStep: React.FC<ResultStepProps> = ({ data, people, assignment
           <Button variant="outline" onClick={handleDownloadImage} disabled={isDownloading} className="flex items-center gap-2 text-sm">
              {isDownloading ? <LoadingSpinner /> : <FileImage size={16} />} 
              <span className="hidden sm:inline">Simpan JPG</span>
-             <span className="sm:hidden">JPG</span>
           </Button>
           <Button variant="outline" onClick={handleDownloadPDF} disabled={isDownloading} className="flex items-center gap-2 text-sm">
              {isDownloading ? <LoadingSpinner /> : <FileText size={16} />}
              <span className="hidden sm:inline">Simpan PDF</span>
-             <span className="sm:hidden">PDF</span>
           </Button>
         </div>
       </div>
 
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Hasil Pembagian</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Hasil Pembagian Exact</h2>
       </div>
 
-      {/* Wrapper for capture */}
       <div ref={tableRef} className="bg-white p-4 rounded-xl shadow-lg border border-gray-200">
         <div className="mb-4 text-center border-b pb-4">
             <h3 className="font-bold text-xl text-emerald-800">{data.merchantName} - {data.date}</h3>
-            <p className="text-gray-500 text-sm">Rincian Split Bill</p>
+            <p className="text-gray-500 text-sm">Rincian Split Bill Tanpa Pembulatan</p>
         </div>
 
         <div className="overflow-x-auto">
@@ -178,7 +166,7 @@ export const ResultStep: React.FC<ResultStepProps> = ({ data, people, assignment
               </tr>
             </thead>
             <tbody>
-              {result.personResults.map((res, idx) => (
+              {result.personResults.map((res) => (
                 <tr key={res.person.id} className="border-b hover:bg-gray-50">
                   <td className="px-6 py-4 font-medium text-gray-900 align-top">
                     {res.person.name}
@@ -245,7 +233,6 @@ export const ResultStep: React.FC<ResultStepProps> = ({ data, people, assignment
                     Dihitung dengan TWA BillSplitter
                 </div>
             </div>
-            {/* Added crossOrigin="anonymous" to ensure html2canvas can capture it if server supports it */}
             <img 
                crossOrigin="anonymous"
                src="https://i.ibb.co.com/qMpmxMWq/Screenshot-2025-12-15-093652.jpg" 
@@ -259,10 +246,10 @@ export const ResultStep: React.FC<ResultStepProps> = ({ data, people, assignment
         <Card className="bg-emerald-50 border-emerald-100">
            <h3 className="font-semibold text-emerald-800 mb-2">Metode Perhitungan</h3>
            <ul className="text-sm text-emerald-700 space-y-1 list-disc pl-4">
-             <li>Harga Menu: Sesuai harga asli di struk.</li>
-             <li>Diskon: Proporsional <code>(HargaMenu / Subtotal) × TotalDiskon</code>.</li>
-             <li>Delivery & Fee: Dibagi rata <code>TotalFee / JumlahOrang</code> (dibulatkan ke atas).</li>
-             {data.tax > 0 && <li>Pajak: Proporsional <code>(HargaMenu / Subtotal) × TotalPajak</code>.</li>}
+             <li>Harga Menu: Sesuai data input (tanpa pembulatan).</li>
+             <li>Diskon: Proporsional tepat.</li>
+             <li>Delivery & Fee: Dibagi rata tanpa pembulatan.</li>
+             <li>Presisi: Menampilkan 2 digit desimal terakhir sesuai permintaan.</li>
            </ul>
         </Card>
       </div>
