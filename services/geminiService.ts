@@ -41,18 +41,17 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
           parts: [
             imagePart,
             {
-              text: `Analyze this food delivery receipt (GoFood, GrabFood, ShopeeFood). Extract details:
+              text: `Analyze this food delivery or restaurant receipt. Extract details:
               1. Merchant/Restaurant Name.
               2. Date (DD Month YYYY).
               3. Items (name, price, quantity).
-              4. Subtotal, Total Discount (positive), Delivery Fee, Service Fee, Tax.
+              4. Subtotal, Total Discount (positive), Delivery Fee, Service Fee.
+              5. TAX/PB1: Look specifically for Tax or PB1. If it's a percentage (e.g. 10%), extract that percentage. If it's only a nominal amount, extract that.
               
               CRITICAL RULES FOR IDR PRICES:
-              - DO NOT ROUND ANY VALUES. Extract the exact value including any decimal parts (cents) if present.
-              - In Indonesian receipts, a dot (.) is usually a thousands separator (e.g., 15.000 is 15 thousand). 
-              - If you see "15.000", return 15000. If you see "7,5" or "7.5" and it clearly represents 7500, return 7500.
-              - However, if there are actual cents (e.g., "15000.75"), return 15000.75.
-              - NEVER truncate zeros. If a price is 5000, return 5000. 
+              - DO NOT ROUND ANY VALUES. Extract exactly as written.
+              - Thousands separator is usually dot (.), decimals usually comma (,).
+              - NEVER truncate zeros. 
               - RETURN RAW NUMBERS ONLY in the JSON.`,
             },
           ],
@@ -70,7 +69,7 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
                   type: Type.OBJECT,
                   properties: {
                     name: { type: Type.STRING },
-                    price: { type: Type.NUMBER, description: "Exact price as written, no rounding" },
+                    price: { type: Type.NUMBER },
                     quantity: { type: Type.INTEGER },
                   },
                   required: ["name", "price", "quantity"],
@@ -80,7 +79,7 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
               totalDiscount: { type: Type.NUMBER },
               deliveryFee: { type: Type.NUMBER },
               serviceFee: { type: Type.NUMBER },
-              tax: { type: Type.NUMBER },
+              tax: { type: Type.NUMBER, description: "Nominal tax amount or percentage (e.g. 0.1 for 10%)" },
             },
             required: ["merchantName", "date", "items", "subtotal", "totalDiscount", "deliveryFee", "serviceFee", "tax"],
           },
@@ -97,8 +96,6 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
 
       const data = JSON.parse(cleanText);
 
-      // HEURISTIC: Handle common AI confusion between thousands separator and decimal point in IDR
-      // If the value is suspiciously low (< 1000) but represents a food price, it likely needs * 1000.
       let multiplier = 1;
       const checkSubtotal = data.subtotal || 0;
       if (checkSubtotal > 0 && checkSubtotal < 1000) {
@@ -106,6 +103,16 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
       }
 
       const fixPrice = (val: number | undefined) => (val || 0) * multiplier;
+
+      // Handle tax percentage if it looks like a small decimal (e.g. 0.1) 
+      // but only if multiplier hasn't already scaled it wrongly.
+      let finalTax = data.tax || 0;
+      if (finalTax > 0 && finalTax <= 1) {
+          // This is likely a percentage (e.g. 0.1 for 10%), keep it as nominal later
+          finalTax = Math.round(data.subtotal * finalTax);
+      } else {
+          finalTax = fixPrice(finalTax);
+      }
 
       const items = (data.items || []).map((item: any, index: number) => ({
         ...item,
@@ -121,13 +128,13 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
         totalDiscount: fixPrice(data.totalDiscount),
         deliveryFee: fixPrice(data.deliveryFee),
         serviceFee: fixPrice(data.serviceFee),
-        tax: fixPrice(data.tax),
+        tax: finalTax,
       };
 
     } catch (error: any) {
         lastError = error;
         const errorMessage = typeof error === 'string' ? error : (error.message || JSON.stringify(error));
-        const isTransient = errorMessage.includes('503') || errorMessage.includes('overloaded') || errorMessage.includes('UNAVAILABLE') || (error.status === 503);
+        const isTransient = errorMessage.includes('503') || errorMessage.includes('overloaded') || errorMessage.includes('UNAVAILABLE');
         if (isTransient && attempt < MAX_RETRIES - 1) {
             await delay(2000 * Math.pow(2, attempt));
             continue;
@@ -136,20 +143,5 @@ export const analyzeReceipt = async (file: File): Promise<ExtractedReceiptData> 
     }
   }
 
-  let friendlyMessage = "Gagal menghubungi AI. Model sedang sibuk, silakan coba lagi sebentar lagi.";
-  if (lastError?.message) {
-      try {
-          if (lastError.message.includes('{"error":')) {
-              const jsonMatch = lastError.message.match(/\{.*\}/);
-              const jsonStr = jsonMatch ? jsonMatch[0] : lastError.message;
-              const errObj = JSON.parse(jsonStr);
-              if (errObj.error?.message) friendlyMessage = `AI Error: ${errObj.error.message}`;
-          } else {
-             friendlyMessage = lastError.message;
-          }
-      } catch (e) {
-          friendlyMessage = lastError.message;
-      }
-  }
-  throw new Error(friendlyMessage);
+  throw new Error("Gagal menganalisa struk. Coba lagi nanti.");
 };
